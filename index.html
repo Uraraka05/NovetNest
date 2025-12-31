@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NovelNest - Your Personal Library</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+        
+        .font-serif { font-family: 'Playfair Display', serif; }
+        .font-sans { font-family: 'Inter', sans-serif; }
+        
+        .book-card {
+            transition: all 0.3s ease;
+            transform-style: preserve-3d;
+        }
+        .book-card:hover {
+            transform: translateY(-8px) rotateY(5deg);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        .hero-gradient {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 50%, #581c87 100%);
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, #8B5CF6, #EC4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .modal-backdrop {
+            backdrop-filter: blur(10px);
+        }
+        .star-rating-input .star {
+            color: #d1d5db; /* gray-300 */
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .star-rating-input .star:hover,
+        .star-rating-input .star.selected {
+            color: #fbbf24; /* amber-400 */
+        }
+        /* Custom scrollbar for modals */
+        .modal-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .modal-content::-webkit-scrollbar-track {
+            background: #f1f5f9; /* gray-100 */
+        }
+        .modal-content::-webkit-scrollbar-thumb {
+            background: #a78bfa; /* violet-400 */
+            border-radius: 10px;
+        }
+        .modal-content::-webkit-scrollbar-thumb:hover {
+            background: #8b5cf6; /* violet-500 */
+        }
+        /* Loader styles */
+        .loader {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #FFF;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Class for truncating description text */
+        .truncate-text {
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 4; /* Show 4 lines, adjust as needed */
+            line-clamp: 4; /* Standard property for compatibility */
+            -webkit-box-orient: vertical;
+        }
+        /* Styles for the heart like button */
+        .like-btn .filled-heart { display: none; }
+        .like-btn .outline-heart { display: inline-block; }
+        .like-btn.liked .filled-heart { display: inline-block; }
+        .like-btn.liked .outline-heart { display: none; }
+        .like-btn.liked { color: #ef4444; } /* This is Tailwind's red-500 color */
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+            <div class="flex items-center">
+                <a href="#" onclick="showSection('home', this); return false;" class="flex items-center">
+                    <img src="logo.png" alt="NovelNest Logo" class="h-10 w-auto mr-3">
+                    <h1 class="text-2xl font-serif font-bold text-gradient">NovelNest</h1>
+                </a>
+            </div>
+                <div class="hidden md:flex space-x-8">
+                    <button onclick="showSection('home', this)" class="nav-btn text-purple-600 hover:text-purple-600 font-medium transition-colors">Home</button>
+                    <button onclick="showSection('browse', this)" class="nav-btn text-gray-700 hover:text-purple-600 font-medium transition-colors">Browse</button>
+                    <button id="nav-admin" onclick="showSection('admin', this)" class="nav-btn text-gray-700 hover:text-purple-600 font-medium transition-colors hidden">Admin</button>
+                </div>
+                <div id="auth-container" class="flex items-center space-x-4"></div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <div id="home" class="section">
+            <div class="hero-gradient text-white py-20">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                    <h2 class="text-5xl font-serif font-bold mb-6">Discover Your Next Great Read</h2>
+                    <p class="text-xl mb-8 opacity-90">Explore exclusive novels, read free previews, and join a community of readers.</p>
+                    <button onclick="showSection('browse', document.querySelector('button[onclick*=\'browse\']'))" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">Start Reading</button>
+                </div>
+            </div>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+                <h3 class="text-3xl font-serif font-bold text-gray-900 mb-8 text-center">Featured This Week</h3>
+                <div id="featured-books-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"></div>
+            </div>
+        </div>
+
+        <div id="browse" class="section hidden">
+             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                 <h2 class="text-3xl font-serif font-bold text-gray-900 mb-8">Browse All Novels</h2>
+                 <div class="mb-8 flex flex-col md:flex-row gap-4">
+                     <div class="relative flex-grow">
+                         <input id="search-input" type="text" placeholder="Search by title, author, or series..." class="form-input w-full p-3 pl-10 border border-gray-300 rounded-lg">
+                         <svg class="w-5 h-5 text-gray-400 absolute top-1/2 left-3 transform -translate-y-1/2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                         </svg>
+                     </div>
+                     <select id="genre-filter" class="form-select w-full md:w-64 p-3 border border-gray-300 rounded-lg bg-white">
+                         </select>
+                 </div>
+                 <div id="book-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"></div>
+                 <div id="load-more-container" class="text-center mt-12"></div>
+             </div>
+        </div>
+
+        <div id="admin" class="section hidden">
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <h2 class="text-3xl font-serif font-bold text-gray-900 mb-8">Admin Panel</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-white p-8 rounded-xl shadow-lg">
+                        <h3 id="admin-form-title" class="text-2xl font-semibold mb-6">Upload a New Novel</h3>
+                        <form id="upload-novel-form" class="space-y-6">
+                            <input type="hidden" id="novel-id-input">
+                            <input id="novel-title" type="text" placeholder="Novel Title" required class="form-input w-full p-3 border border-gray-300 rounded-lg">
+                            <input id="novel-author" type="text" placeholder="Author Name" required class="form-input w-full p-3 border border-gray-300 rounded-lg">
+                            <textarea id="novel-description" placeholder="Synopsis / Description" required class="form-input w-full p-3 border border-gray-300 rounded-lg h-32"></textarea>
+                            <input id="novel-genre" type="text" placeholder="Genre (e.g., Fantasy)" required class="form-input w-full p-3 border border-gray-300 rounded-lg">
+                            
+                            <input id="novel-series-name" type="text" placeholder="Series Name (optional)" class="form-input w-full p-3 border border-gray-300 rounded-lg">
+                            <input id="novel-series-order" type="number" placeholder="Order in Series (e.g., 1, 2)" class="form-input w-full p-3 border border-gray-300 rounded-lg">
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Cover Image (PNG, JPG) <span id="cover-image-note" class="text-xs text-gray-500"></span></label>
+                                <input id="cover-image-file" type="file" accept="image/png, image/jpeg" class="form-input w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Novel PDF <span id="pdf-file-note" class="text-xs text-gray-500"></span></label>
+                                <input id="novel-pdf-file" type="file" accept="application/pdf" class="form-input w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                            </div>
+                            <div class="flex space-x-4">
+                                <button type="submit" id="upload-button" class="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors font-semibold flex items-center justify-center space-x-2">
+                                    <span id="upload-button-text">Upload Novel</span>
+                                </button>
+                                <button type="button" id="cancel-edit-button" onclick="resetAdminForm()" class="hidden flex-1 bg-gray-500 text-white py-3 rounded-lg hover:bg-gray-600 transition-colors font-semibold">
+                                    Cancel Edit
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="bg-white p-8 rounded-xl shadow-lg">
+                        <h3 class="text-2xl font-semibold mb-6">Manage Novels</h3>
+                        <div id="admin-book-list" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                            </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="bookModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden items-center justify-center z-50 p-4" onclick="closeBookModal()">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+            <div class="p-6 md:p-8 pb-4">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex-1 pr-4">
+                        <h3 id="modalTitle" class="text-2xl md:text-3xl font-serif font-bold text-gray-900 mb-1"></h3>
+                        <p id="modalAuthor" class="text-lg md:text-xl text-gray-600"></p>
+                    </div>
+                    <button onclick="closeBookModal()" class="text-gray-400 hover:text-gray-600 text-3xl font-bold">&times;</button>
+                </div>
+            </div>
+            <div id="modal-content-area" class="overflow-y-auto px-6 md:px-8 pb-8 modal-content"></div>
+        </div>
+    </div>
+    
+    <div id="authModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full m-4">
+            <div class="p-8 relative">
+                <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-3xl font-bold">&times;</button>
+                <h2 id="auth-title" class="text-center text-3xl font-serif font-bold text-gray-900">Sign In</h2>
+                <p id="auth-subtitle" class="mt-2 text-center text-sm text-gray-600">to unlock full novels and features</p>
+                <div id="error-message" class="hidden mt-4 text-center bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">
+                    <span id="error-text"></span>
+                </div>
+                
+                <form id="login-form" class="mt-8 space-y-6">
+                    <div class="space-y-4">
+                        <input id="login-email" type="email" required class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="Email address">
+                        <div class="relative">
+                            <input id="login-password" type="password" required class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="Password">
+                        </div>
+                    </div>
+                    <div class="text-sm text-right">
+                        <a href="#" id="forgot-password-link" class="font-medium text-purple-600 hover:text-purple-500">Forgot your password?</a>
+                    </div>
+                    <button type="submit" class="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors font-semibold flex justify-center items-center" data-original-text="Sign In">Sign In</button>
+                </form>
+                
+                <form id="signup-form" class="mt-8 space-y-6 hidden">
+                    <div class="space-y-4">
+                        <input id="signup-email" type="email" required class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="Email address">
+                        <input id="signup-password" type="password" required class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="Password (min. 6 characters)">
+                        <input id="signup-confirm-password" type="password" required class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="Confirm Password">
+                    </div>
+                    <button type="submit" class="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors font-semibold flex justify-center items-center" data-original-text="Create Account">Create Account</button>
+                </form>
+
+                <form id="forgot-password-form" class="mt-8 space-y-6 hidden">
+                    <input id="forgot-email" type="email" required class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="Enter your email address">
+                    <button type="submit" class="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors font-semibold">Send Reset Link</button>
+                </form>
+
+                <p class="mt-6 text-center text-sm">
+                    <span id="toggle-text">Don't have an account?</span>
+                    <a href="#" id="toggle-link" class="font-medium text-purple-600 hover:text-purple-500">Sign Up</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-8 shadow-xl">
+            <h3 id="confirm-title" class="text-xl font-bold text-gray-900 mb-4">Are you sure?</h3>
+            <p id="confirm-text" class="text-gray-600 mb-6">This action cannot be undone.</p>
+            <div class="flex justify-end space-x-4">
+                <button id="confirm-cancel-btn" class="px-6 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 font-semibold">Cancel</button>
+                <button id="confirm-ok-btn" class="px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-semibold">Delete</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification" class="fixed bottom-5 right-5 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-500 z-50">
+        <p id="notification-text"></p>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://onysbrjeexydkwlshjfp.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ueXNicmplZXh5ZGt3bHNoamZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDI2NjEsImV4cCI6MjA2OTcxODY2MX0.ufAhZdavpfoiQ7TZvXs6KQT-d5fA7GbP6mIr8PmVYiA';
+        const ADMIN_EMAIL = "madhumithakarthikeyan2005@gmail.com";
+
+        const { createClient } = supabase;
+        const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let books = [];
+        let filteredBooks = [];
+        let currentUser = null;
+        let currentOpenBookId = null;
+        let currentUserReview = null; 
+        const BOOKS_PER_PAGE = 12;
+        let visibleBookCount = BOOKS_PER_PAGE;
+        
+        const heartIconOutlineSVG = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 21l-7.682-7.318a4.5 4.5 0 010-6.364z" />
+            </svg>`;
+        const heartIconFilledSVG = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
+            </svg>`;
+
+
+        // --- DOM Element Cache ---
+        const DOMElements = {
+            authContainer: document.getElementById('auth-container'),
+            navAdmin: document.getElementById('nav-admin'),
+            authModal: document.getElementById('authModal'),
+            bookModal: document.getElementById('bookModal'),
+            confirmModal: document.getElementById('confirmModal'),
+            loginForm: document.getElementById('login-form'),
+            signupForm: document.getElementById('signup-form'),
+            forgotPasswordForm: document.getElementById('forgot-password-form'),
+            forgotPasswordLink: document.getElementById('forgot-password-link'),
+            toggleLink: document.getElementById('toggle-link'),
+            toggleText: document.getElementById('toggle-text'),
+            authTitle: document.getElementById('auth-title'),
+            authSubtitle: document.getElementById('auth-subtitle'),
+            errorMessageDiv: document.getElementById('error-message'),
+            errorText: document.getElementById('error-text'),
+            uploadForm: document.getElementById('upload-novel-form'),
+            uploadButton: document.getElementById('upload-button'),
+            uploadButtonText: document.getElementById('upload-button-text'),
+            adminFormTitle: document.getElementById('admin-form-title'),
+            cancelEditBtn: document.getElementById('cancel-edit-button'),
+            adminBookList: document.getElementById('admin-book-list'),
+            novelIdInput: document.getElementById('novel-id-input'),
+            coverImageNote: document.getElementById('cover-image-note'),
+            pdfFileNote: document.getElementById('pdf-file-note'),
+            searchInput: document.getElementById('search-input'),
+            genreFilter: document.getElementById('genre-filter'),
+            featuredBooksGrid: document.getElementById('featured-books-grid'),
+            bookGrid: document.getElementById('book-grid'),
+            loadMoreContainer: document.getElementById('load-more-container')
+        };
+
+        // --- Utility Functions ---
+        const showNotification = (message, isError = false) => {
+            const el = document.getElementById('notification');
+            el.textContent = message;
+            el.classList.toggle('bg-red-600', isError);
+            el.classList.toggle('bg-gray-800', !isError);
+            el.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => el.classList.add('translate-y-20', 'opacity-0'), 4000);
+        };
+        const showError = (message) => {
+            DOMElements.errorText.textContent = message;
+            DOMElements.errorMessageDiv.classList.remove('hidden');
+        };
+        const hideError = () => DOMElements.errorMessageDiv.classList.add('hidden');
+
+        const setButtonLoading = (button, isLoading) => {
+            if (isLoading) {
+                button.disabled = true;
+                button.innerHTML = `<span class="loader"></span>`;
+            } else {
+                button.disabled = false;
+                button.innerHTML = button.dataset.originalText || 'Submit';
+            }
+        };
+
+        // --- Auth UI & State ---
+        const updateAuthUI = (user) => {
+            currentUser = user;
+            if (user) {
+                DOMElements.authContainer.innerHTML = `<span class="text-sm text-gray-600 hidden sm:block">Welcome!</span><button id="logout-button" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">Logout</button>`;
+                document.getElementById('logout-button').onclick = async () => { 
+                    await _supabase.auth.signOut(); 
+                    showNotification('You have been logged out.');
+                };
+                closeAuthModal();
+                DOMElements.navAdmin.classList.toggle('hidden', user.email !== ADMIN_EMAIL);
+            } else {
+                DOMElements.authContainer.innerHTML = `<button id="login-trigger" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">Sign In</button>`;
+                document.getElementById('login-trigger').onclick = openAuthModal;
+                DOMElements.navAdmin.classList.add('hidden');
+            }
+            renderAdminBookList(books);
+        };
+
+        // --- Book Rendering & Filtering ---
+        const bookHTML = (book) => {
+            const avgRating = parseFloat(book.average_rating) || 0;
+            const reviewCount = book.review_count || 0;
+            const ratingLabel = reviewCount === 1 ? 'rating' : 'ratings';
+            let ratingHTML = '';
+
+            if (reviewCount > 0) {
+                const fullStars = Math.round(avgRating);
+                const emptyStars = 5 - fullStars;
+                ratingHTML = `
+                    <div class="flex items-center mt-4">
+                        <div class="text-amber-400 text-xl">${'★'.repeat(fullStars)}${'☆'.repeat(emptyStars)}</div>
+                        <span class="text-gray-500 ml-2 text-sm">${avgRating.toFixed(1)} (${reviewCount} ${ratingLabel})</span>
+                    </div>`;
+            } else {
+                ratingHTML = `<div class="flex items-center mt-4"><span class="text-gray-400 text-sm">No ratings yet</span></div>`;
+            }
+
+            return `
+                <div class="book-card bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer flex flex-col" data-id="${book.id}">
+                    <div class="h-64 bg-cover bg-center" style="background-image: url('${book.cover_image_url}')"></div>
+                    <div class="p-6 flex flex-col flex-grow">
+                        <h4 class="font-serif font-bold text-xl mb-2 truncate">${book.title}</h4>
+                        <p class="text-gray-600 mb-2">by ${book.author}</p>
+                        <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-medium capitalize self-start">${book.genre}</span>
+                        <div class="mt-auto">${ratingHTML}</div>
+                    </div>
+                </div>`;
+        };
+
+        window.loadMoreBooks = () => {
+            visibleBookCount += BOOKS_PER_PAGE;
+            renderBooksOnBrowsePage();
+        };
+
+        const addClickListenersToBookCards = () => {
+             document.querySelectorAll('.book-card').forEach(card => {
+                 card.onclick = () => {
+                     const book = books.find(b => b.id == card.dataset.id);
+                     if(book) openBookModal(book);
+                 };
+             });
+        };
+
+        const renderBooksOnBrowsePage = () => {
+            const booksToShow = filteredBooks.slice(0, visibleBookCount);
+            
+            if (booksToShow.length > 0) {
+                DOMElements.bookGrid.innerHTML = booksToShow.map(bookHTML).join('');
+            } else {
+                DOMElements.bookGrid.innerHTML = `<p class="text-gray-500 col-span-full text-center py-10">No novels match your search criteria.</p>`;
+            }
+
+            DOMElements.loadMoreContainer.innerHTML = '';
+            if (visibleBookCount < filteredBooks.length) {
+                DOMElements.loadMoreContainer.innerHTML = `<button onclick="loadMoreBooks()" class="bg-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-purple-700 transition-colors">Load More</button>`;
+            }
+            
+            addClickListenersToBookCards();
+        };
+        
+        const applyFilters = () => {
+            const searchTerm = DOMElements.searchInput.value.toLowerCase();
+            const selectedGenre = DOMElements.genreFilter.value;
+            
+            visibleBookCount = BOOKS_PER_PAGE;
+
+            filteredBooks = books.filter(book => {
+                const matchesSearch = searchTerm === '' ||
+                    book.title.toLowerCase().includes(searchTerm) ||
+                    book.author.toLowerCase().includes(searchTerm) ||
+                    (book.series_name && book.series_name.toLowerCase().includes(searchTerm));
+                
+                const matchesGenre = selectedGenre === 'all' || book.genre.trim().toLowerCase() === selectedGenre;
+
+                return matchesSearch && matchesGenre;
+            });
+            
+            renderBooksOnBrowsePage();
+        };
+
+        // --- Admin Panel ---
+        const renderAdminBookList = (bookArray) => {
+            if (!DOMElements.adminBookList) return;
+            if (!currentUser || currentUser.email !== ADMIN_EMAIL) {
+                DOMElements.adminBookList.innerHTML = '<p class="text-gray-500">You do not have permission to manage novels.</p>';
+                return;
+            }
+            if (bookArray.length === 0) {
+                DOMElements.adminBookList.innerHTML = '<p class="text-gray-500">No novels uploaded yet.</p>';
+                return;
+            }
+            
+            DOMElements.adminBookList.innerHTML = bookArray.map(book => `
+                <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                    <p class="font-medium text-gray-800 truncate pr-2">${book.title}</p>
+                    <div class="flex-shrink-0 space-x-2">
+                        <button onclick="populateAdminFormForEdit('${book.id}')" class="text-blue-600 hover:text-blue-800 font-semibold text-sm">Edit</button>
+                        <button onclick="confirmDeleteNovel('${book.id}')" class="text-red-600 hover:text-red-800 font-semibold text-sm">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        };
+
+        window.populateAdminFormForEdit = (bookId) => {
+            const book = books.find(b => b.id == bookId);
+            if (!book) return;
+
+            DOMElements.adminFormTitle.textContent = "Edit Novel";
+            DOMElements.uploadButtonText.textContent = "Save Changes";
+            DOMElements.cancelEditBtn.classList.remove('hidden');
+            
+            DOMElements.novelIdInput.value = book.id;
+            DOMElements.uploadForm['novel-title'].value = book.title;
+            DOMElements.uploadForm['novel-author'].value = book.author;
+            DOMElements.uploadForm['novel-description'].value = book.description;
+            DOMElements.uploadForm['novel-genre'].value = book.genre;
+            DOMElements.uploadForm['novel-series-name'].value = book.series_name || '';
+            DOMElements.uploadForm['novel-series-order'].value = book.series_order || '';
+
+            DOMElements.uploadForm['cover-image-file'].required = false;
+            DOMElements.uploadForm['novel-pdf-file'].required = false;
+            DOMElements.coverImageNote.textContent = '(Leave blank to keep current image)';
+            DOMElements.pdfFileNote.textContent = '(Leave blank to keep current PDF)';
+
+            DOMElements.uploadForm.scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.resetAdminForm = () => {
+            DOMElements.adminFormTitle.textContent = "Upload a New Novel";
+            DOMElements.uploadButtonText.textContent = "Upload Novel";
+            DOMElements.cancelEditBtn.classList.add('hidden');
+            DOMElements.uploadForm.reset();
+            DOMElements.novelIdInput.value = '';
+            
+            DOMElements.uploadForm['novel-series-name'].value = '';
+            DOMElements.uploadForm['novel-series-order'].value = '';
+
+            DOMElements.uploadForm['cover-image-file'].required = true;
+            DOMElements.uploadForm['novel-pdf-file'].required = true;
+            DOMElements.coverImageNote.textContent = '';
+            DOMElements.pdfFileNote.textContent = '';
+        };
+        
+        window.confirmDeleteNovel = (bookId) => {
+            const book = books.find(b => b.id == bookId);
+            if (!book) return;
+            
+            showConfirmModal(
+                `Delete "${book.title}"?`,
+                "This will permanently delete the novel, its cover, its PDF, and all associated reviews and replies.",
+                async () => {
+                    try {
+                        const { error } = await _supabase.from('novels').delete().eq('id', bookId);
+                        if (error) throw error;
+                        
+                        const coverPath = book.cover_image_url.substring(book.cover_image_url.lastIndexOf('public/'));
+                        const pdfPath = book.pdf_url.substring(book.pdf_url.lastIndexOf('public/'));
+
+                        await _supabase.storage.from('covers').remove([coverPath]);
+                        await _supabase.storage.from('pdfs').remove([pdfPath]);
+
+                        showNotification(`"${book.title}" was deleted successfully.`);
+                        fetchBooks();
+                    } catch (error) {
+                        console.error("Deletion failed: ", error);
+                        showNotification(`Error deleting novel: ${error.message}`, true);
+                    }
+                }
+            );
+        };
+
+        const handleNovelUploadOrUpdate = async (e) => {
+            e.preventDefault();
+            if (!currentUser) { showNotification("You must be logged in.", true); return; }
+
+            const button = DOMElements.uploadButton;
+            setButtonLoading(button, true);
+
+            const bookId = DOMElements.novelIdInput.value;
+            const isEditing = !!bookId;
+
+            const title = DOMElements.uploadForm['novel-title'].value;
+            const author = DOMElements.uploadForm['novel-author'].value;
+            const description = DOMElements.uploadForm['novel-description'].value;
+            const genre = DOMElements.uploadForm['novel-genre'].value;
+            const series_name = DOMElements.uploadForm['novel-series-name'].value.trim() || null;
+            const series_order = DOMElements.uploadForm['novel-series-order'].value ? parseInt(DOMElements.uploadForm['novel-series-order'].value) : null;
+            
+            const coverFile = DOMElements.uploadForm['cover-image-file'].files[0];
+            const pdfFile = DOMElements.uploadForm['novel-pdf-file'].files[0];
+
+            try {
+                let cover_image_url, pdf_url;
+
+                if (coverFile) {
+                    const coverFilePath = `public/${Date.now()}_${coverFile.name}`;
+                    const { error } = await _supabase.storage.from('covers').upload(coverFilePath, coverFile);
+                    if (error) throw new Error(`Cover upload failed: ${error.message}`);
+                    cover_image_url = _supabase.storage.from('covers').getPublicUrl(coverFilePath).data.publicUrl;
+                }
+
+                if (pdfFile) {
+                    const pdfFilePath = `public/${Date.now()}_${pdfFile.name}`;
+                    const { error } = await _supabase.storage.from('pdfs').upload(pdfFilePath, pdfFile);
+                    if (error) throw new Error(`PDF upload failed: ${error.message}`);
+                    pdf_url = _supabase.storage.from('pdfs').getPublicUrl(pdfFilePath).data.publicUrl;
+                }
+
+                const novelData = { title, author, description, genre, series_name, series_order };
+                if (cover_image_url) novelData.cover_image_url = cover_image_url;
+                if (pdf_url) novelData.pdf_url = pdf_url;
+                
+                Object.keys(novelData).forEach(key => (novelData[key] === undefined) && delete novelData[key]);
+
+                if (isEditing) {
+                    const { error } = await _supabase.from('novels').update(novelData).eq('id', bookId);
+                    if (error) throw error;
+                    showNotification("Novel updated successfully!");
+                } else {
+                    const { error } = await _supabase.from('novels').insert([novelData]);
+                    if (error) throw error;
+                    showNotification("Novel uploaded successfully!");
+                }
+                
+                resetAdminForm();
+                await fetchBooks();
+                showSection('browse', document.querySelector('button[onclick*="browse"]'));
+
+            } catch (error) {
+                console.error("Operation failed: ", error);
+                showNotification(`Error: ${error.message}`, true);
+            } finally {
+                button.innerHTML = DOMElements.uploadButtonText.textContent;
+                setButtonLoading(button, false);
+                if (isEditing) resetAdminForm();
+            }
+        };
+
+        // --- Modals (Auth, Book, Confirm) ---
+        window.openAuthModal = () => { DOMElements.authModal.classList.add('flex'); DOMElements.authModal.classList.remove('hidden'); };
+        window.closeAuthModal = () => { 
+            DOMElements.authModal.classList.add('hidden'); 
+            DOMElements.authModal.classList.remove('flex'); 
+            hideError(); 
+            DOMElements.loginForm.classList.remove('hidden');
+            DOMElements.signupForm.classList.add('hidden');
+            DOMElements.forgotPasswordForm.classList.add('hidden');
+            DOMElements.toggleLink.parentElement.classList.remove('hidden');
+            DOMElements.authTitle.textContent = 'Sign In';
+            DOMElements.authSubtitle.textContent = 'to unlock full novels and features';
+        };
+
+        window.showSeries = (seriesName) => {
+            closeBookModal();
+            DOMElements.searchInput.value = '';
+            DOMElements.genreFilter.value = 'all';
+
+            filteredBooks = books
+                .filter(book => book.series_name === seriesName)
+                .sort((a, b) => (a.series_order || 999) - (b.series_order || 999));
+
+            visibleBookCount = filteredBooks.length;
+            renderBooksOnBrowsePage();
+            showSection('browse', document.querySelector('button[onclick*="browse"]'));
+            
+            DOMElements.searchInput.placeholder = `Showing series: "${seriesName}"`;
+            setTimeout(() => { DOMElements.searchInput.placeholder = "Search by title, author, or series..."; }, 4000);
+        };
+
+        window.toggleDescription = () => {
+            const desc = document.getElementById('modal-description');
+            const btn = document.getElementById('show-more-btn');
+            desc.classList.toggle('truncate-text');
+            btn.textContent = desc.classList.contains('truncate-text') ? 'Show More' : 'Show Less';
+        };
+
+        // UPDATED: This function is completely rewritten to be more robust and fix Safari layout issues.
+        window.openBookModal = async (book) => {
+            currentOpenBookId = book.id;
+            currentUserReview = null;
+            document.getElementById('modalTitle').textContent = book.title;
+            document.getElementById('modalAuthor').textContent = `by ${book.author}`;
+            const contentArea = document.getElementById('modal-content-area');
+            contentArea.innerHTML = '<p class="text-center p-8">Loading details...</p>';
+            
+            DOMElements.bookModal.classList.add('flex');
+            DOMElements.bookModal.classList.remove('hidden');
+
+            const structuredReviews = await fetchAndRenderReviews(book.id);
+
+            if (currentUser) {
+                currentUserReview = structuredReviews.find(r => r.user_id === currentUser.id && !r.parent_review_id);
+            }
+            
+            let seriesInfoHTML = '';
+            if (book.series_name) {
+                seriesInfoHTML = `
+                    <div class="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r-lg">
+                        <p class="text-sm text-yellow-800">
+                            Part ${book.series_order || '?'} of the 
+                            <a href="#" onclick="event.preventDefault(); showSeries('${book.series_name}')" class="font-bold underline hover:text-yellow-900">
+                                ${book.series_name}
+                            </a> series.
+                        </p>
+                    </div>`;
+            }
+
+            const description_limit = 400;
+            let descriptionHTML = `<p id="modal-description" class="text-gray-700 leading-relaxed whitespace-pre-wrap">${book.description}</p>`;
+            if (book.description.length > description_limit) {
+                descriptionHTML = `
+                    <div class="mt-4">
+                        <p id="modal-description" class="text-gray-700 leading-relaxed truncate-text mb-2 whitespace-pre-wrap">${book.description}</p>
+                        <button id="show-more-btn" onclick="toggleDescription()" class="text-purple-600 font-semibold hover:underline">Show More</button>
+                    </div>`;
+            }
+
+            const ctaButtonsHTML = `
+                <div class="flex flex-col sm:flex-row gap-4 mt-6">
+                    <a href="${book.pdf_url}" target="_blank" class="flex-1 text-center bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-semibold">Read Full Novel</a>
+                    <a href="${book.pdf_url}" download="${book.title}.pdf" class="flex-1 text-center bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold">Download PDF</a>
+                </div>
+            `;
+
+            const previewNoticeHTML = `
+                <div class="bg-gray-100 border-l-4 border-purple-500 text-purple-700 p-4 rounded-r-lg mt-6" role="alert">
+                    <p class="font-bold">Preview Only</p>
+                    <p><a href="#" id="modal-login-link" class="underline">Sign in or create an account</a> to read the full novel and leave a review.</p>
+                </div>
+            `;
+            
+            // New robust layout
+            let mainContent = `
+                <div class="flex flex-col md:flex-row gap-6 md:gap-8">
+                    <div class="w-full md:w-1/3 flex-shrink-0">
+                        <img src="${book.cover_image_url}" alt="Cover for ${book.title}" class="w-full rounded-lg shadow-lg aspect-[2/3] object-cover">
+                    </div>
+                    <div class="md:w-2/3 min-w-0">
+                        ${seriesInfoHTML}
+                        <h4 class="font-bold text-lg mb-2">Synopsis</h4>
+                        ${descriptionHTML}
+                        ${currentUser ? ctaButtonsHTML : previewNoticeHTML}
+                    </div>
+                </div>
+                <hr class="my-8">
+                <div id="reviews-section"></div>
+            `;
+            
+            contentArea.innerHTML = mainContent;
+            document.getElementById('reviews-section').innerHTML = getReviewsHTML(structuredReviews, !!currentUser);
+            
+            if (currentUser) {
+                setupReviewForm();
+            } else {
+                document.getElementById('modal-login-link').onclick = (e) => { e.preventDefault(); closeBookModal(); openAuthModal(); };
+            }
+        };
+
+
+        window.closeBookModal = () => { DOMElements.bookModal.classList.add('hidden'); DOMElements.bookModal.classList.remove('flex'); currentOpenBookId = null;};
+        
+        window.showConfirmModal = (title, text, onConfirm, confirmButtonText = 'Delete') => {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-text').textContent = text;
+            const confirmBtn = document.getElementById('confirm-ok-btn');
+            confirmBtn.textContent = confirmButtonText; 
+            DOMElements.confirmModal.classList.add('flex');
+            DOMElements.confirmModal.classList.remove('hidden');
+
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+
+            const close = () => {
+                DOMElements.confirmModal.classList.add('hidden');
+                DOMElements.confirmModal.classList.remove('flex');
+                confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+                cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+            };
+
+            document.getElementById('confirm-ok-btn').onclick = () => {
+                onConfirm();
+                close();
+            };
+            document.getElementById('confirm-cancel-btn').onclick = close;
+        };
+        
+        // --- Page Navigation ---
+        window.showSection = (sectionName, element) => {
+            document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(sectionName).classList.remove('hidden');
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.replace('text-purple-600', 'text-gray-700'));
+            if(element) {
+                element.classList.replace('text-gray-700', 'text-purple-600');
+            }
+        };
+
+        // --- Data Fetching ---
+        const fetchBooks = async () => {
+            const { data: novelsData, error: novelsError } = await _supabase.from('novels').select('*');
+            if (novelsError) { console.error("Error fetching books: ", novelsError); showNotification("Could not load books.", true); return; }
+
+            const { data: reviewsData } = await _supabase.from('reviews').select('book_id, rating').is('parent_review_id', null);
+            
+            const ratings = {};
+            if (reviewsData) {
+                reviewsData.forEach(review => {
+                    if (!ratings[review.book_id]) ratings[review.book_id] = { total: 0, count: 0 };
+                    ratings[review.book_id].total += review.rating;
+                    ratings[review.book_id].count++;
+                });
+            }
+
+            books = novelsData.map(book => ({
+                ...book,
+                average_rating: ratings[book.id] ? (ratings[book.id].total / ratings[book.id].count) : 0,
+                review_count: ratings[book.id] ? ratings[book.id].count : 0,
+            })).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            
+            const genres = [...new Set(books.map(b => b.genre.trim().toLowerCase()).filter(g => g))].sort();
+            const genreFilter = DOMElements.genreFilter;
+            genreFilter.innerHTML = '<option value="all">All Genres</option>';
+            genres.forEach(genre => {
+                const option = document.createElement('option');
+                option.value = genre;
+                option.textContent = genre.charAt(0).toUpperCase() + genre.slice(1);
+                genreFilter.appendChild(option);
+            });
+
+            DOMElements.featuredBooksGrid.innerHTML = books.slice(0, 4).map(bookHTML).join('');
+            applyFilters();
+            renderAdminBookList(books);
+            addClickListenersToBookCards();
+        };
+        
+        // --- Review, Reply, & Like Logic ---
+        window.handleLikeClick = async (reviewId) => {
+            if (!currentUser) {
+                showNotification('You must be logged in to like comments.', true);
+                return;
+            }
+
+            const likeBtn = document.getElementById(`like-btn-${reviewId}`);
+            const likeCountSpan = document.getElementById(`like-count-${reviewId}`);
+            const hasLiked = likeBtn.classList.contains('liked');
+
+            likeBtn.disabled = true;
+
+            if (hasLiked) {
+                const { error } = await _supabase.from('comment_likes').delete().match({ review_id: reviewId, user_id: currentUser.id });
+                if (error) { showNotification('Failed to unlike.', true); } 
+                else {
+                    likeBtn.classList.remove('liked');
+                    likeCountSpan.textContent = parseInt(likeCountSpan.textContent) - 1;
+                }
+            } else {
+                const { error } = await _supabase.from('comment_likes').insert({ review_id: reviewId, user_id: currentUser.id });
+                 if (error) { showNotification('Failed to like.', true); } 
+                 else {
+                    likeBtn.classList.add('liked');
+                    likeCountSpan.textContent = parseInt(likeCountSpan.textContent) + 1;
+                }
+            }
+            likeBtn.disabled = false;
+        };
+
+        window.handleDeleteReply = (reviewId) => {
+            showConfirmModal( 'Delete this?', 'This action cannot be undone.', async () => {
+                const { error } = await _supabase.from('reviews').delete().eq('id', reviewId);
+                if (error) { showNotification('Error deleting: ' + error.message, true); } 
+                else {
+                    const elementToRemove = document.getElementById(`review-container-${reviewId}`);
+                    if (elementToRemove) {
+                        elementToRemove.style.transition = 'opacity 0.3s ease';
+                        elementToRemove.style.opacity = '0';
+                        setTimeout(() => elementToRemove.remove(), 300);
+                    }
+                    showNotification('Successfully deleted.');
+                    await fetchBooks();
+                }
+            });
+        };
+
+        window.toggleEditForm = (reviewId) => {
+            const contentDiv = document.getElementById(`review-content-${reviewId}`);
+            const textP = document.getElementById(`review-text-${reviewId}`);
+            const currentText = textP.textContent;
+
+            const formHTML = `
+                <form onsubmit="handleEditSubmit(event, '${reviewId}')">
+                    <textarea class="form-input w-full p-2 border border-gray-300 rounded-lg h-20" required>${currentText}</textarea>
+                    <div class="flex items-center justify-end space-x-2 mt-2">
+                        <button type="button" onclick="cancelEdit('${reviewId}')" class="text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                        <button type="submit" data-original-text="Save" class="bg-green-600 text-white px-4 py-1 rounded-lg hover:bg-green-700 text-sm">Save</button>
+                    </div>
+                </form>
+            `;
+            contentDiv.innerHTML = formHTML;
+            contentDiv.querySelector('textarea').focus();
+        };
+        
+        window.cancelEdit = async (reviewId) => {
+             const { data: review, error } = await _supabase.from('reviews').select(`*, comment_likes(user_id)`).eq('id', reviewId).single();
+             if(error || !review) return; 
+
+             review.like_count = review.comment_likes.length;
+             review.current_user_has_liked = currentUser ? review.comment_likes.some(like => like.user_id === currentUser.id) : false;
+
+             const contentDiv = document.getElementById(`review-content-${reviewId}`);
+             const parentContainer = document.getElementById(`review-container-${reviewId}`);
+             const isReply = parentContainer.classList.contains('ml-4');
+             contentDiv.innerHTML = renderReviewContent(review, isReply);
+        }
+
+        window.handleEditSubmit = async (event, reviewId) => {
+            event.preventDefault();
+            const form = event.target;
+            const newText = form.querySelector('textarea').value;
+            const button = form.querySelector('button[type="submit"]');
+            setButtonLoading(button, true);
+
+            const { error } = await _supabase.from('reviews').update({ review_text: newText }).eq('id', reviewId);
+            setButtonLoading(button, false);
+
+            if (error) { showNotification('Error updating: ' + error.message, true); } 
+            else {
+                await window.cancelEdit(reviewId);
+                showNotification('Update successful!');
+            }
+        };
+
+        window.handleReplySubmit = async (e, parentId) => {
+            e.preventDefault();
+            const form = e.target;
+            const textarea = form.querySelector('textarea');
+            const button = form.querySelector('button');
+            const review_text = textarea.value.trim();
+
+            if (!review_text) { return; }
+            if (!currentUser || !currentOpenBookId) return;
+
+            setButtonLoading(button, true);
+
+            try {
+                const { data, error } = await _supabase.from('reviews').insert([{ 
+                        book_id: currentOpenBookId, user_id: currentUser.id, rating: null, 
+                        review_text, user_email: currentUser.email, parent_review_id: parentId
+                    }]).select().single();
+
+                if (error) throw error;
+                
+                data.like_count = 0;
+                data.current_user_has_liked = false;
+                data.replies = [];
+
+                const newReplyHTML = renderReviewThread(data, true);
+                document.getElementById(`replies-${parentId}`).insertAdjacentHTML('beforeend', newReplyHTML);
+                form.remove();
+                showNotification('Reply posted!');
+            } catch (error) {
+                showNotification('Error posting reply: ' + error.message, true);
+            } finally {
+                setButtonLoading(button, false);
+            }
+        };
+
+        window.toggleReplyForm = (reviewId) => {
+            const formContainer = document.getElementById(`reply-form-${reviewId}`);
+            if (formContainer.innerHTML !== '') {
+                formContainer.innerHTML = ''; return;
+            }
+            formContainer.innerHTML = `
+                <form onsubmit="handleReplySubmit(event, '${reviewId}')" class="mt-4 ml-4 pl-4 border-l-2 border-gray-200">
+                    <textarea class="form-input w-full p-2 border border-gray-300 rounded-lg h-20" placeholder="Write a reply..." required></textarea>
+                    <div class="flex items-center justify-end space-x-2 mt-2">
+                        <button type="button" onclick="document.getElementById('reply-form-${reviewId}').innerHTML = ''" class="text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                        <button type="submit" data-original-text="Post" class="bg-blue-500 text-white px-4 py-1 rounded-lg hover:bg-blue-600 text-sm">Post</button>
+                    </div>
+                </form>
+            `;
+            formContainer.querySelector('textarea').focus();
+        };
+
+        const renderReviewContent = (review, isReply) => {
+            const authorHTML = `<p class="font-semibold">${review.user_email.split('@')[0]}</p>`;
+            const ratingHTML = review.rating ? `<div class="ml-4 text-amber-400 text-lg">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</div>` : '';
+            
+            let userControlsHTML = '';
+            if (currentUser) {
+                if (currentUser.id === review.user_id || currentUser.email === ADMIN_EMAIL) {
+                    userControlsHTML += `<button onclick="handleDeleteReply(${review.id})" class="text-xs font-semibold text-red-600 hover:underline">Delete</button>`;
+                }
+                if (currentUser.id === review.user_id) {
+                     userControlsHTML += `<button onclick="toggleEditForm(${review.id})" class="text-xs font-semibold text-gray-600 hover:underline">Edit</button>`;
+                }
+            }
+
+            const replyButtonHTML = currentUser ? `<button onclick="toggleReplyForm(${review.id})" class="text-xs font-semibold text-blue-600 hover:underline">Reply</button>` : '';
+            
+            const canLike = currentUser && currentUser.id !== review.user_id;
+            const likedClass = review.current_user_has_liked ? 'liked' : '';
+            const likeButtonHTML = canLike ? `
+                <button id="like-btn-${review.id}" onclick="handleLikeClick(${review.id})" class="like-btn ${likedClass} flex items-center space-x-1 text-gray-500 hover:text-red-500 transition-colors">
+                    <span class="outline-heart">${heartIconOutlineSVG}</span>
+                    <span class="filled-heart">${heartIconFilledSVG}</span>
+                    <span id="like-count-${review.id}" class="text-xs font-semibold">${review.like_count}</span>
+                </button>
+            ` : `
+                <div class="flex items-center space-x-1 text-gray-400">
+                    <span class="outline-heart">${heartIconOutlineSVG}</span>
+                    <span class="text-xs font-semibold">${review.like_count}</span>
+                </div>
+            `;
+
+            return `
+                <div class="flex items-center mb-2">
+                    ${authorHTML}
+                    ${ratingHTML}
+                    <span class="ml-auto text-xs text-gray-500">${new Date(review.created_at).toLocaleDateString()}</span>
+                </div>
+                <p class="text-gray-700 whitespace-pre-wrap" id="review-text-${review.id}">${review.review_text || ''}</p>
+                <div class="mt-2 flex items-center space-x-4">
+                    ${likeButtonHTML}
+                    <div class="flex items-center space-x-3">
+                        ${replyButtonHTML}
+                        ${userControlsHTML}
+                    </div>
+                </div>`;
+        };
+        
+        const renderReviewThread = (review, isReply = false) => {
+            const hasReplies = review.replies && review.replies.length > 0;
+            return `
+                <div id="review-container-${review.id}" class="review-container ${isReply ? 'ml-4 pl-4 mt-3 border-l-2 border-gray-200' : ''}">
+                    <div id="review-content-${review.id}" class="bg-gray-50 p-4 rounded-lg">
+                        ${renderReviewContent(review, isReply)}
+                    </div>
+                    <div id="reply-form-${review.id}"></div>
+                    <div id="replies-${review.id}" class="replies-container">
+                        ${hasReplies ? review.replies.map(reply => renderReviewThread(reply, true)).join('') : ''}
+                    </div>
+                </div>`;
+        };
+
+        const fetchAndRenderReviews = async (bookId) => {
+            const { data: reviewsData, error } = await _supabase.from('reviews').select(`*, comment_likes(user_id)`).eq('book_id', bookId).order('created_at', { ascending: true });
+            if (error) { console.error('Error fetching reviews:', error); return []; }
+            if (!reviewsData || reviewsData.length === 0) return [];
+            
+            const reviewMap = new Map();
+            const topLevelReviews = [];
+            
+            reviewsData.forEach(review => {
+                review.replies = [];
+                review.like_count = review.comment_likes.length;
+                review.current_user_has_liked = currentUser ? review.comment_likes.some(like => like.user_id === currentUser.id) : false;
+                reviewMap.set(review.id, review);
+            });
+
+            reviewsData.forEach(review => {
+                if (review.parent_review_id && reviewMap.has(review.parent_review_id)) {
+                    reviewMap.get(review.parent_review_id).replies.push(review);
+                } else {
+                    topLevelReviews.push(review);
+                }
+            });
+
+            return topLevelReviews.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+        };
+
+        const getReviewsHTML = (structuredReviews, showForm = true) => {
+            const reviewsWithText = structuredReviews.filter(review => review.review_text && review.review_text.trim() !== '');
+            
+            let formHTML = '';
+            let reviewsHTML = reviewsWithText.length > 0 ? 
+                reviewsWithText.map(review => renderReviewThread(review, false)).join('') : 
+                '<p class="text-gray-500">No written reviews yet. Be the first!</p>';
+            
+            if (showForm) {
+                const isEditing = !!currentUserReview;
+                const title = isEditing ? "Edit Your Rating & Review" : "Leave a Rating";
+                const buttonText = isEditing ? "Update" : "Submit";
+
+                formHTML = `
+                <form id="review-form" class="space-y-4 mt-6">
+                    <h5 class="font-semibold">${title}</h5>
+                    <div class="star-rating-input text-3xl" data-rating="0">
+                        ${[1,2,3,4,5].map(v => `<span class="star" data-value="${v}">★</span>`).join('')}
+                    </div>
+                    <textarea id="review-text" class="form-input w-full p-3 border border-gray-300 rounded-lg h-24" placeholder="Share your thoughts... "></textarea>
+                    <button type="submit" data-original-text="${buttonText}" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">${buttonText}</button>
+                </form>`;
+            }
+            return `
+                <h4 class="text-xl font-semibold mb-4">Reviews</h4>
+                <div id="reviews-list" class="space-y-4 mb-6">${reviewsHTML}</div>
+                ${formHTML}`;
+        };
+
+        const setupReviewForm = () => {
+            const form = document.getElementById('review-form');
+            if (!form) return;
+            const starsContainer = form.querySelector('.star-rating-input');
+            const stars = starsContainer.querySelectorAll('.star');
+            const reviewTextArea = document.getElementById('review-text');
+
+            const isEditing = !!currentUserReview;
+
+            if (isEditing) {
+                reviewTextArea.value = currentUserReview.review_text || '';
+                const currentRating = currentUserReview.rating;
+                starsContainer.dataset.rating = currentRating;
+                stars.forEach(s => s.classList.toggle('selected', s.dataset.value <= currentRating));
+            }
+
+            stars.forEach(star => star.onclick = () => {
+                const rating = star.dataset.value;
+                starsContainer.dataset.rating = rating;
+                stars.forEach(s => s.classList.toggle('selected', s.dataset.value <= rating));
+            });
+
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                const rating = parseInt(starsContainer.dataset.rating);
+                const review_text = reviewTextArea.value;
+                const button = form.querySelector('button[type="submit"]');
+
+                if (rating === 0) { showNotification("Please select a star rating.", true); return; }
+
+                setButtonLoading(button, true);
+
+                try {
+                    if (isEditing) {
+                        const { error } = await _supabase.from('reviews').update({ rating, review_text }).match({ id: currentUserReview.id });
+                        if (error) throw error;
+                        showNotification('Your review has been updated!');
+                    } else {
+                        const { error } = await _supabase.from('reviews').insert([{ 
+                            book_id: currentOpenBookId, user_id: currentUser.id, rating, review_text, 
+                            user_email: currentUser.email, parent_review_id: null 
+                        }]);
+                        if (error) throw error;
+                        showNotification('Thank you for your submission!');
+                    }
+                    
+                    const structuredReviews = await fetchAndRenderReviews(currentOpenBookId);
+                    currentUserReview = structuredReviews.find(r => r.user_id === currentUser.id && !r.parent_review_id);
+                    document.getElementById('reviews-section').innerHTML = getReviewsHTML(structuredReviews, true);
+                    setupReviewForm();
+                    await fetchBooks();
+
+                } catch(error) {
+                    showNotification('Error submitting: ' + error.message, true);
+                } finally {
+                    setButtonLoading(button, false);
+                }
+            };
+        };
+
+        // --- Event Listeners ---
+        const setupEventListeners = () => {
+            DOMElements.loginForm.addEventListener('submit', async (e) => { 
+                e.preventDefault(); 
+                hideError();
+                const submitButton = DOMElements.loginForm.querySelector('button[type="submit"]');
+                setButtonLoading(submitButton, true);
+                try {
+                    const { error } = await _supabase.auth.signInWithPassword({ email: DOMElements.loginForm['login-email'].value, password: DOMElements.loginForm['login-password'].value }); 
+                    if (error) showError(error.message);
+                } finally {
+                    setButtonLoading(submitButton, false);
+                }
+            });
+
+            DOMElements.signupForm.addEventListener('submit', async (e) => { 
+                e.preventDefault(); 
+                hideError();
+                if (DOMElements.signupForm['signup-password'].value !== DOMElements.signupForm['signup-confirm-password'].value) { showError("Passwords do not match."); return; } 
+
+                const submitButton = DOMElements.signupForm.querySelector('button[type="submit"]');
+                setButtonLoading(submitButton, true);
+                try {
+                    const { error } = await _supabase.auth.signUp({ email: DOMElements.signupForm['signup-email'].value, password: DOMElements.signupForm['signup-password'].value }); 
+                    if (error) { showError(error.message); } 
+                    else { showNotification('Welcome! Please check your email to confirm your account.'); closeAuthModal(); }
+                } finally {
+                    setButtonLoading(submitButton, false);
+                }
+            });
+
+            DOMElements.forgotPasswordForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                hideError();
+                const email = DOMElements.forgotPasswordForm['forgot-email'].value;
+                const { error } = await _supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+                if (error) { showError(error.message); } 
+                else { closeAuthModal(); showNotification("Password reset link sent to your email."); }
+            });
+
+            DOMElements.toggleLink.addEventListener('click', (e) => { 
+                e.preventDefault(); 
+                hideError(); 
+                const isLoginVisible = !DOMElements.loginForm.classList.contains('hidden');
+                DOMElements.loginForm.classList.toggle('hidden', isLoginVisible);
+                DOMElements.signupForm.classList.toggle('hidden', !isLoginVisible);
+                DOMElements.authTitle.textContent = isLoginVisible ? 'Create Your Account' : 'Sign In';
+                DOMElements.toggleText.textContent = isLoginVisible ? 'Already have an account?' : "Don't have an account?";
+                DOMElements.toggleLink.textContent = isLoginVisible ? 'Sign In' : 'Sign Up';
+            });
+
+            DOMElements.forgotPasswordLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                hideError();
+                DOMElements.loginForm.classList.add('hidden');
+                DOMElements.signupForm.classList.add('hidden');
+                DOMElements.toggleLink.parentElement.classList.add('hidden');
+                DOMElements.forgotPasswordForm.classList.remove('hidden');
+                DOMElements.authTitle.textContent = 'Reset Password';
+                DOMElements.authSubtitle.textContent = 'We\'ll send a recovery link to your email.';
+            });
+
+            DOMElements.uploadForm.addEventListener('submit', handleNovelUploadOrUpdate);
+            DOMElements.searchInput.addEventListener('input', applyFilters);
+            DOMElements.genreFilter.addEventListener('change', applyFilters);
+        };
+        
+        // --- App Initialization ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            const { data: { session } } = await _supabase.auth.getSession();
+            updateAuthUI(session?.user ?? null);
+            await fetchBooks();
+            showSection('home', document.querySelector('button[onclick*="home"]'));
+            setupEventListeners();
+            
+            _supabase.auth.onAuthStateChange((_event, session) => {
+                updateAuthUI(session?.user ?? null);
+            });
+        });
+    </script>
+</body>
+</html>
